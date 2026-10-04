@@ -305,7 +305,6 @@ dialog::backdrop{background:rgba(2,6,14,.75);backdrop-filter:blur(4px)}
     <p>Free API keys unlock the full movie, TV and game catalogs with posters. Without them the app uses TVMaze and Wikidata, which have fewer titles and fewer images. Keys are saved only in this browser.</p>
     <div class="field"><label for="kTmdb">TMDB key (movies + TV)<a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Get a free key</a></label><input id="kTmdb" type="password" autocomplete="off" placeholder="API key (v3) or Read Access Token"><small>Sign up at themoviedb.org, then Settings → API.</small></div>
     <div class="field"><label for="kRawg">RAWG key (games: PS5, Xbox, Switch, Steam)<a href="https://rawg.io/apidocs" target="_blank" rel="noopener">Get a free key</a></label><input id="kRawg" type="password" autocomplete="off" placeholder="RAWG API key"></div>
-    <div class="field"><label for="kBooks">Google Books key (optional)<a href="https://console.cloud.google.com/apis/library/books.googleapis.com" target="_blank" rel="noopener">Enable API</a></label><input id="kBooks" type="password" autocomplete="off" placeholder="Google Cloud API key"><small>Google often blocks key-less book requests. A key makes book data reliable.</small></div>
     <label class="check"><input type="checkbox" id="tvAll"> Show every TV episode, not only premieres</label>
     <div class="d-actions"><button class="btn cta" value="save" id="saveKeys">Save and reload data</button><button class="btn ghost" type="button" id="clearCache">Clear cached data</button><button class="btn ghost" value="cancel" formnovalidate>Close</button></div>
   </form>
@@ -352,7 +351,13 @@ const fmtBadge=iso=>{const d=dateObj(iso);return `${WD[d.getDay()].toUpperCase()
 
 /* ---------- genre & platform normalisation ---------- */
 const GALIAS={'sci fi':'Science Fiction','science fiction':'Science Fiction','sf':'Science Fiction','sci fi fantasy':['Science Fiction','Fantasy'],'action adventure':'Action-Adventure','action adventure game':'Action-Adventure','role playing':'RPG','role playing video':'RPG','role playing games':'RPG','rpg':'RPG','action role playing':'RPG','first person shooter':'Shooter','third person shooter':'Shooter','shooter':'Shooter','massively multiplayer':'MMO','massively multiplayer online role playing':'MMO','animated':'Animation','animation':'Animation','biographical':'Biography','biography autobiography':'Biography','biography':'Biography','juvenile fiction':'Kids','children s':'Kids','kids':'Kids','young adult fiction':'Young Adult','young adult':'Young Adult','war politics':['War','Politics'],'comedy drama':'Comedy','romantic comedy':['Romance','Comedy'],'crime thriller':['Crime','Thriller'],'psychological thriller':'Thriller','thrillers':'Thriller','fiction':'Fiction','reality':'Reality','talk':'Talk Show','soap':'Soap','music':'Music','musical':'Music','concert':'Music','documentary':'Documentary','tv movie':'TV Movie','platformer':'Platformer','platform':'Platformer','indie':'Indie','casual':'Casual','sports':'Sports','racing':'Racing','strategy':'Strategy','real time strategy':'Strategy','simulation':'Simulation','puzzle':'Puzzle','fighting':'Fighting','arcade':'Arcade','board games':'Board Games','card':'Card','educational':'Educational','family':'Family','survival horror':'Horror'};
+// Every LGBTQ variant groups under "LGBTQ+"; lesbian titles also get their own "Lesbian" genre.
+const LESBIAN_RE=/lesbian|sapphic|\bwlw\b/i;
+const LGBT_RE=/lgbt|queer|\bgay\b|lesbian|sapphic|\bwlw\b|\bmlm\b|transgender|bisexual|homosexual|non-?binary|genderqueer|two-spirit|same-sex/i;
+const PIN_GENRES=['LGBTQ+','Lesbian'];
 function normGenre(g){
+  if(LESBIAN_RE.test(g))return['LGBTQ+','Lesbian'];
+  if(LGBT_RE.test(g))return['LGBTQ+'];
   let k=norm(g).replace(/\b(film|films|movie|video game|television series|tv series|novel|literature|book|genre)\b/g,'').replace(/\s+/g,' ').trim();
   if(!k)return[];
   const a=GALIAS[k]; if(a)return Array.isArray(a)?a:[a];
@@ -376,7 +381,7 @@ const PLAT_ORDER=['PS5','Xbox Series X|S','Switch 2','Switch','PC / Steam','PS4'
 const S={
   ym:todayISO.slice(0,7), type:store.get('rr:type','all'), genres:new Set(), plats:new Set(),
   view:store.get('rr:view','grid'), q:'', day:null, items:[], src:{}, shown:96, tok:0, genreAll:false,
-  keys:store.get('rr:keys',{tmdb:'',rawg:'',gbooks:''}), tvAll:store.get('rr:tvAll',false), detailId:null
+  keys:{tmdb:'',rawg:'',...store.get('rr:keys',{})}, tvAll:store.get('rr:tvAll',false), detailId:null
 };
 
 /* ---------- favorites (saved per browser, keyed by item.key so they survive source changes) ---------- */
@@ -425,7 +430,7 @@ function favCode(mode){
   }
   $('#favCode').showModal();
 }
-const PRI_SAFE=['tmdb','rawg','hardcover','tvmaze','gbooks','wikidata'];
+const PRI_SAFE=['tmdb','rawg','hardcover','tvmaze','wikidata'];
 
 /* ---------- fetching ---------- */
 async function getJSON(url,opt={}){
@@ -444,22 +449,47 @@ function tmdb(path,params={}){
   return getJSON(`https://api.themoviedb.org/3${path}?${p}`,bearer?{headers:{Authorization:'Bearer '+k}}:{});
 }
 async function tmdbGenres(kind){const j=await tmdb(`/genre/${kind}/list`);return Object.fromEntries(j.genres.map(g=>[g.id,g.name]))}
+// TMDB has no LGBTQ+ genre, only keywords. Look the keyword ids up once (cached 30 days), then tag matching titles.
+async function tmdbKeywordIds(){
+  const c=store.get('rr:kw',null);if(c&&Date.now()-c.t<30*864e5)return c;
+  const res=await Promise.all(['lgbt','queer','gay','transgender','bisexual','lesbian','sapphic'].map(q=>tmdb('/search/keyword',{query:q}).catch(()=>({results:[]}))));
+  const all=res.flatMap(r=>r.results||[]);
+  const lesbian=[...new Set(all.filter(k=>LESBIAN_RE.test(k.name)).map(k=>k.id))].slice(0,20);
+  const lgbt=[...new Set(all.filter(k=>LGBT_RE.test(k.name)&&!lesbian.includes(k.id)).map(k=>k.id))].slice(0,40);
+  const out={t:Date.now(),lgbt,lesbian};if(lgbt.length||lesbian.length)store.set('rr:kw',out);return out;
+}
+async function tmdbTagged(kind,from,to){
+  const kw=await tmdbKeywordIds(), dk=kind==='movie'?'primary_release_date':'first_air_date';
+  const q=async ids=>ids.length?(await Promise.all([1,2].map(page=>tmdb(`/discover/${kind}`,{[dk+'.gte']:from,[dk+'.lte']:to,with_keywords:ids.join('|'),sort_by:'popularity.desc',page}).catch(()=>({results:[]}))))).flatMap(p=>p.results||[]):[];
+  const[any,les]=await Promise.all([q([...kw.lgbt,...kw.lesbian]),q(kw.lesbian)]);
+  const lesIds=new Set(les.map(x=>x.id));
+  return[...any,...les].map(x=>({raw:x,extra:lesIds.has(x.id)?['LGBTQ+','Lesbian']:['LGBTQ+']}));
+}
+async function tmdbDiscover(kind,from,to,pageCount,params){
+  const[g,pages,tagged]=await Promise.all([
+    tmdbGenres(kind),
+    Promise.all(Array.from({length:pageCount},(_,k)=>tmdb(`/discover/${kind}`,{...params,sort_by:'popularity.desc',page:k+1}).catch(()=>({results:[]})))),
+    tmdbTagged(kind,from,to).catch(()=>[])
+  ]);
+  const extra=new Map(), raw=new Map();
+  tagged.forEach(t=>{extra.set(t.raw.id,[...new Set([...(extra.get(t.raw.id)||[]),...t.extra])]);raw.set(t.raw.id,t.raw)});
+  pages.flatMap(p=>p.results||[]).forEach(x=>raw.set(x.id,x));
+  return{g,list:[...raw.values()],extra};
+}
 async function tmdbMovies(from,to){
-  const g=await tmdbGenres('movie');
-  const pages=await Promise.all([1,2,3,4,5].map(page=>tmdb('/discover/movie',{'primary_release_date.gte':from,'primary_release_date.lte':to,sort_by:'popularity.desc',include_adult:'false',page}).catch(()=>({results:[]}))));
-  return pages.flatMap(p=>p.results).filter(m=>m.release_date>=from&&m.release_date<=to&&(m.poster_path||m.overview)).map(m=>({
+  const{g,list,extra}=await tmdbDiscover('movie',from,to,5,{'primary_release_date.gte':from,'primary_release_date.lte':to,include_adult:'false'});
+  return list.filter(m=>m.release_date>=from&&m.release_date<=to&&(m.poster_path||m.overview)).map(m=>({
     key:'movie:'+norm(m.title),id:'tm'+m.id,type:'movie',title:m.title,date:m.release_date,
     img:m.poster_path?TMDB_IMG+'w342'+m.poster_path:null,backdrop:m.backdrop_path?TMDB_IMG+'w1280'+m.backdrop_path:null,
-    desc:m.overview,genres:normGenres((m.genre_ids||[]).map(i=>g[i]).filter(Boolean)),plats:[],lang:m.original_language,
+    desc:m.overview,genres:[...new Set([...normGenres((m.genre_ids||[]).map(i=>g[i]).filter(Boolean)),...(extra.get(m.id)||[])])],plats:[],lang:m.original_language,
     url:`https://www.themoviedb.org/movie/${m.id}`,source:'tmdb',srcName:'TMDB',pop:m.popularity||0}));
 }
 async function tmdbTV(from,to){
-  const g=await tmdbGenres('tv');
-  const pages=await Promise.all([1,2,3].map(page=>tmdb('/discover/tv',{'first_air_date.gte':from,'first_air_date.lte':to,sort_by:'popularity.desc',page}).catch(()=>({results:[]}))));
-  return pages.flatMap(p=>p.results).filter(t=>t.first_air_date>=from&&t.first_air_date<=to&&(t.poster_path||t.overview)).map(t=>({
+  const{g,list,extra}=await tmdbDiscover('tv',from,to,3,{'first_air_date.gte':from,'first_air_date.lte':to});
+  return list.filter(t=>t.first_air_date>=from&&t.first_air_date<=to&&(t.poster_path||t.overview)).map(t=>({
     key:`tv:${norm(t.name)}:${t.first_air_date}`,id:'tt'+t.id,type:'tv',title:t.name,sub:'Series premiere',date:t.first_air_date,
     img:t.poster_path?TMDB_IMG+'w342'+t.poster_path:null,backdrop:t.backdrop_path?TMDB_IMG+'w1280'+t.backdrop_path:null,
-    desc:t.overview,genres:normGenres((t.genre_ids||[]).map(i=>g[i]).filter(Boolean)),plats:[],lang:t.original_language,
+    desc:t.overview,genres:[...new Set([...normGenres((t.genre_ids||[]).map(i=>g[i]).filter(Boolean)),...(extra.get(t.id)||[])])],plats:[],lang:t.original_language,
     url:`https://www.themoviedb.org/tv/${t.id}`,source:'tmdb',srcName:'TMDB',pop:t.popularity||0}));
 }
 async function rawg(from,to,alive){
@@ -472,7 +502,7 @@ async function rawg(from,to,alive){
   return out.filter(g=>g.released&&g.released>=from&&g.released<=to).map(g=>({
     key:'game:'+norm(g.name),id:'rw'+g.id,rid:g.id,type:'game',title:g.name,date:g.released,
     img:g.background_image,backdrop:g.background_image,desc:'',
-    genres:normGenres((g.genres||[]).map(x=>x.name)),plats:[...new Set((g.platforms||[]).map(p=>normPlat(p.platform.name)).filter(Boolean))],
+    genres:normGenres([...(g.genres||[]).map(x=>x.name),...(g.tags||[]).map(x=>x?.name||'').filter(n=>LGBT_RE.test(n))]),plats:[...new Set((g.platforms||[]).map(p=>normPlat(p.platform.name)).filter(Boolean))],
     url:`https://rawg.io/games/${g.slug}`,source:'rawg',srcName:'RAWG',pop:(g.added||0)/50}));
 }
 async function tvmaze(from,to,alive,onPart){
@@ -517,29 +547,6 @@ async function wikidata(kind,from,to){
       url:art||b.item.value,source:'wikidata',srcName:'Wikidata',pop:b.image||art?1:.2};
   });
 }
-const BOOK_SUBJECTS=[['fiction','Fiction'],['fantasy','Fantasy'],['science fiction','Science Fiction'],['thrillers','Thriller'],['mystery','Mystery'],['romance','Romance'],['horror','Horror'],['young adult fiction','Young Adult'],['biography','Biography'],['history','History'],['comics','Comics']];
-async function gbooks(from,to,alive){
-  const out=[];let ok=0,err;
-  for(const[s,label]of BOOK_SUBJECTS){
-    if(!alive())break;
-    try{
-      const k=S.keys.gbooks.trim();
-      const j=await getJSON(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(`subject:"${s}"`)}&orderBy=newest&maxResults=40&printType=books&langRestrict=en${k?'&key='+encodeURIComponent(k):''}`);
-      ok++;
-      for(const v of j.items||[]){
-        const i=v.volumeInfo||{}; const d=i.publishedDate||'';
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d<from||d>to)continue;
-        out.push({key:'book:'+norm(i.title),id:'gb'+v.id,type:'book',title:i.title+(i.subtitle?': '+i.subtitle:''),date:d,
-          img:i.imageLinks?.thumbnail?.replace(/^http:/,'https:')||null,backdrop:null,desc:stripHtml(i.description),
-          genres:normGenres([label,...(i.categories||[])]),plats:[],by:(i.authors||[]).join(', '),
-          url:i.infoLink||i.canonicalVolumeLink,source:'gbooks',srcName:'Google Books',pop:(i.ratingsCount||0)+(i.imageLinks?1:0)});
-      }
-    }catch(e){err=e;if(String(e.message).startsWith('429'))break}
-    await sleep(250);
-  }
-  if(!ok&&err)throw err;
-  return out;
-}
 // Hardcover runs through the Netlify Function (token stays server-side). Anywhere else the endpoint is missing and the source switches off quietly.
 async function hardcover(from){
   const ym=from.slice(0,7);let r;
@@ -548,7 +555,8 @@ async function hardcover(from){
   const j=await r.json();
   if(!r.ok)throw new Error(j.error||`Hardcover ${r.status}`);
   const names=c=>(Array.isArray(c)?c:[]).map(x=>x?.author?.name||x?.name).filter(Boolean);
-  const tags=t=>{const g=t&&(t.Genre||t.genre);return(Array.isArray(g)?g:[]).map(x=>typeof x==='string'?x:x?.tag).filter(Boolean).slice(0,6)};
+  const pick=v=>(Array.isArray(v)?v:[]).map(x=>typeof x==='string'?x:x?.tag).filter(Boolean);
+  const tags=t=>t&&typeof t==='object'?[...pick(t.Genre||t.genre).slice(0,6),...Object.values(t).flatMap(pick).filter(n=>LGBT_RE.test(n))]:[];
   return(j.books||[]).filter(b=>b.title&&b.release_date).map(b=>({
     key:'book:'+norm(b.title),id:'hc'+b.id,type:'book',title:b.title+(b.subtitle?': '+b.subtitle:''),date:b.release_date,
     img:b.cached_image?.url||null,backdrop:null,desc:b.description||'',genres:normGenres(tags(b.cached_tags)),plats:[],
@@ -571,7 +579,7 @@ async function rawgDetail(item){
 }
 
 /* ---------- loading orchestration ---------- */
-const PRI={tmdb:5,rawg:5,hardcover:5,tvmaze:4,gbooks:3,wikidata:1};
+const PRI={tmdb:5,rawg:5,hardcover:5,tvmaze:4,wikidata:1};
 function mergeItems(items){
   const m=new Map(S.items.map(i=>[i.key,i]));
   for(const i of items){
@@ -589,7 +597,6 @@ const SOURCES=[
   {id:'tvtmdb',type:'tv',label:()=>'TMDB',fn:(f,t)=>tmdbTV(f,t),mode:()=>'ok',when:()=>!!S.keys.tmdb},
   {id:'tvmaze',type:'tv',label:()=>'TVMaze',fn:(f,t,a,p)=>tvmaze(f,t,a,p),mode:()=>'ok',variant:()=>S.tvAll?'all':'prem'},
   {id:'hardcover',type:'book',label:()=>'Hardcover',fn:(f)=>hardcover(f),mode:()=>'ok'},
-  {id:'gbooks',type:'book',label:()=>'Google Books',fn:(f,t,a)=>gbooks(f,t,a),mode:()=>'ok'},
   {id:'wdbook',type:'book',label:()=>'Wikidata',fn:(f,t)=>wikidata('book',f,t),mode:()=>'fallback'}
 ];
 const TTL=12*3600e3;
@@ -600,7 +607,7 @@ function loadMonth(){
   renderAll();
   for(const src of SOURCES){
     if(src.when&&!src.when()){continue}
-    const ck=`rr:c:${src.id}:${src.label()}:${src.variant?src.variant():''}:${ym}`;
+    const ck=`rr:c2:${src.id}:${src.label()}:${src.variant?src.variant():''}:${ym}`;
     const cached=store.get(ck,null);
     if(cached&&Date.now()-cached.t<TTL){mergeItems(cached.items);S.src[src.id]={state:src.mode(),n:cached.items.length,label:src.label(),type:src.type};continue}
     S.src[src.id]={state:'loading',n:0,label:src.label(),type:src.type};
@@ -650,7 +657,8 @@ function renderSide(){
   }
   // genres
   const gc={};base.filter(i=>matchType(i)&&matchPlat(i)).forEach(i=>i.genres.forEach(g=>gc[g]=(gc[g]||0)+1));
-  let gl=Object.entries(gc).sort((a,b)=>b[1]-a[1]);
+  const pin=g=>{const k=PIN_GENRES.indexOf(g);return k<0?99:k};
+  let gl=Object.entries(gc).sort((a,b)=>pin(a[0])-pin(b[0])||b[1]-a[1]);
   S.genres.forEach(g=>{if(!gc[g])gl.push([g,0])});
   const limit=S.genreAll?gl.length:16;
   $('#genreChips').innerHTML=gl.length?gl.slice(0,limit).map(([g,n])=>`<button class="chip" data-genre="${esc(g)}" aria-pressed="${S.genres.has(g)}">${esc(g)}<small>${n}</small></button>`).join(''):'<span class="eyebrow" style="padding:0 4px;letter-spacing:.04em;text-transform:none">Genres appear as data loads</span>';
@@ -855,13 +863,14 @@ $('#prevM').onclick=()=>{S.ym=shiftYM(S.ym,-1);S.day=null;loadMonth()};
 $('#nextM').onclick=()=>{S.ym=shiftYM(S.ym,1);S.day=null;loadMonth()};
 $('#burger').onclick=()=>setDrawer(!document.body.classList.contains('drawer'));
 let qt;$('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{S.q=e.target.value.trim().toLowerCase();S.shown=96;renderAll()},160)});
-$('#openSettings').onclick=()=>{setDrawer(false);$('#kTmdb').value=S.keys.tmdb;$('#kRawg').value=S.keys.rawg;$('#kBooks').value=S.keys.gbooks;$('#tvAll').checked=S.tvAll;$('#settings').showModal()};
+$('#openSettings').onclick=()=>{setDrawer(false);$('#kTmdb').value=S.keys.tmdb;$('#kRawg').value=S.keys.rawg;$('#tvAll').checked=S.tvAll;$('#settings').showModal()};
 $('#setForm').addEventListener('submit',e=>{
   if(e.submitter?.value!=='save')return;
-  S.keys={tmdb:$('#kTmdb').value.trim(),rawg:$('#kRawg').value.trim(),gbooks:$('#kBooks').value.trim()};S.tvAll=$('#tvAll').checked;
+  S.keys={tmdb:$('#kTmdb').value.trim(),rawg:$('#kRawg').value.trim()};S.tvAll=$('#tvAll').checked;
   store.set('rr:keys',S.keys);store.set('rr:tvAll',S.tvAll);toast('Settings saved. Reloading release data.');loadMonth();
 });
-$('#clearCache').onclick=()=>{store.clear('rr:c:');toast('Cached release data cleared.');$('#settings').close();loadMonth()};
+// Clears current and older cache versions (rr:c:, rr:c2:, …).
+$('#clearCache').onclick=()=>{store.clear('rr:c');toast('Cached release data cleared.');$('#settings').close();loadMonth()};
 
 if(!S.keys.tmdb&&!S.keys.rawg&&!store.get('rr:hinted',false)){store.set('rr:hinted',true);setTimeout(()=>toast('Running on free sources. Add TMDB and RAWG keys in Settings for full coverage.'),1200)}
 loadMonth();
