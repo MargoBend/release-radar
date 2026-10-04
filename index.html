@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Release Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: fixed left nav rail + scrolling main column; calendar view splits main into month grid + sticky day panel */
+:root{
+  --bg:#060c18; --panel:#0d1829; --panel-2:#122139; --panel-3:#182b48; --line:#1d3150;
+  --fg:#e9effb; --muted:#8798b5; --dim:#5d6f8f;
+  --accent:#2f86ff; --accent-soft:rgba(47,134,255,.16); --cta:#ffd23f; --cta-fg:#15130a;
+  --movie:#ff5c7a; --game:#9a86ff; --tv:#2fd3a5; --book:#ffad4a;
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:12px; --side:248px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+a{color:var(--accent)}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.disp{font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.01em;line-height:.92}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.ico{width:18px;height:18px;flex:none}
+
+/* ---------- sidebar ---------- */
+.side{position:fixed;inset:0 auto 0 0;width:var(--side);background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:40;padding:18px 14px calc(18px + env(safe-area-inset-bottom,0px));padding-top:calc(18px + env(safe-area-inset-top,0px));overflow-y:auto;gap:22px}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px}
+.brand-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(140deg,var(--accent),#7b5cff);display:grid;place-items:center;box-shadow:0 6px 20px rgba(47,134,255,.35)}
+.brand-name{font-size:22px}
+.brand small{display:block;color:var(--muted);font-size:12px;font-weight:500;font-family:var(--body);text-transform:none;letter-spacing:0;margin-top:3px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav .eyebrow{padding:0 10px 8px}
+.nav-btn{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:9px;color:var(--muted);font-weight:600;text-align:left;width:100%}
+.nav-btn:hover{background:var(--panel-2);color:var(--fg)}
+.nav-btn[aria-pressed="true"]{background:var(--accent-soft);color:var(--fg)}
+.nav-btn[aria-pressed="true"] .ico{color:var(--accent)}
+.nav-btn .cnt{margin-left:auto;font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+.nav-btn .sw{width:8px;height:8px;border-radius:50%;flex:none}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 6px}
+.chip{border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:5px 10px;font-size:13px;font-weight:600;color:var(--muted);display:inline-flex;gap:6px;align-items:center}
+.chip:hover{color:var(--fg);border-color:var(--panel-3)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip small{font-size:11px;opacity:.7;font-variant-numeric:tabular-nums}
+.link-btn{color:var(--accent);font-size:13px;font-weight:600;padding:6px 10px}
+.promo{margin-top:auto;background:linear-gradient(160deg,#16305a,#0f2140);border:1px solid #23406d;border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.promo h4{margin:0;font-size:14px}
+.src-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--muted)}
+.src-list li{display:flex;align-items:center;gap:8px}
+.src-list b{color:var(--fg);font-weight:600}
+.src-list .n{margin-left:auto;font-variant-numeric:tabular-nums}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
+.dot.ok{background:var(--tv)}.dot.fallback{background:var(--cta)}.dot.error{background:var(--movie)}
+.dot.loading{background:var(--accent);animation:pulse 1s infinite alternate}
+@keyframes pulse{to{opacity:.25}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:9px;padding:9px 14px;font-weight:700;font-size:14px;background:var(--accent);color:#fff}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:var(--panel-3);color:var(--fg)}
+.btn.cta{background:var(--cta);color:var(--cta-fg)}
+
+/* ---------- main ---------- */
+.main{margin-left:var(--side);min-height:100%;display:flex;flex-direction:column}
+.top{position:sticky;top:0;z-index:30;background:rgba(6,12,24,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:12px 24px;padding-top:calc(12px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.burger{display:none;width:38px;height:38px;border-radius:9px;background:var(--panel-2);place-items:center}
+.month{display:flex;align-items:center;gap:6px}
+.month button{width:34px;height:34px;border-radius:8px;background:var(--panel-2);display:grid;place-items:center}
+.month button:hover{background:var(--panel-3)}
+.month-label{font-size:24px;min-width:168px;text-align:center}
+.tabs{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px}
+.tab{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;font-weight:600;font-size:14px;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--panel-3);color:var(--fg)}
+.search{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 12px;min-width:0;flex:0 1 300px}
+.search input{background:none;border:0;outline:0;padding:9px 0;width:100%;min-width:0}
+.search:focus-within{border-color:var(--accent)}
+.icon-btn{width:38px;height:38px;border-radius:9px;background:var(--panel-2);display:grid;place-items:center;flex:none}
+.icon-btn:hover{background:var(--panel-3)}
+.typerow{display:none}
+.content{padding:22px 24px 48px;display:flex;flex-direction:column;gap:28px;min-width:0}
+
+/* ---------- hero ---------- */
+.hero{position:relative;border-radius:16px;overflow:hidden;background:linear-gradient(120deg,#0f2246,#1a1250);border:1px solid var(--line);min-height:250px;display:flex;align-items:stretch}
+.hero-art{position:absolute;inset:0 0 0 30%;background-size:cover;background-position:center;opacity:.9;mask-image:linear-gradient(90deg,transparent,#000 45%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 45%)}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(6,12,24,.85),transparent 60%);pointer-events:none}
+.hero-in{position:relative;z-index:2;display:flex;gap:22px;padding:26px;align-items:flex-start;width:100%}
+.hero-poster{width:120px;aspect-ratio:2/3;border-radius:12px;overflow:hidden;flex:none;box-shadow:0 14px 40px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);background:var(--panel-2)}
+.hero-poster img{width:100%;height:100%;object-fit:cover}
+.hero-text{display:flex;flex-direction:column;gap:10px;min-width:0;max-width:560px}
+.pill{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.1);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700;width:max-content}
+.hero h1{margin:0;font-size:clamp(34px,5vw,58px);text-wrap:balance;text-shadow:0 4px 30px rgba(0,0,0,.4)}
+.hero p{margin:0;color:#c3cfe6;max-width:46ch}
+.stats{display:flex;gap:22px;flex-wrap:wrap;margin-top:8px}
+.stat{display:flex;gap:9px;align-items:center}
+.stat b{font-family:var(--display);font-size:28px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);line-height:1.1}
+.stat i{width:10px;height:10px;border-radius:3px;display:block}
+.hero-feat{position:absolute;right:20px;bottom:18px;z-index:3;background:rgba(6,12,24,.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 12px;font-size:13px;max-width:280px}
+.hero-feat b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- sections & cards ---------- */
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sec-head h2{margin:0;font-size:24px}
+.sec-head p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:transform .15s,border-color .15s;min-width:0}
+.card:hover{transform:translateY(-3px);border-color:#2b4a78}
+.thumb{position:relative;aspect-ratio:16/11;background:var(--panel-2);overflow:hidden}
+.thumb .bgi{position:absolute;inset:-12px;width:calc(100% + 24px);height:calc(100% + 24px);object-fit:cover;filter:blur(14px) brightness(.6);transform:scale(1.05)}
+.thumb .fgi{position:relative;width:100%;height:100%;object-fit:contain}
+.ph{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:44px;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.02em;text-align:center;padding:10px;line-height:.9}
+.ph small{display:block;font-size:12px;letter-spacing:.14em;opacity:.7;margin-top:6px;font-family:var(--body);font-weight:700}
+.badge-date{position:absolute;top:8px;left:8px;background:rgba(6,12,24,.78);border-radius:6px;padding:3px 7px;font-size:11.5px;font-weight:700;display:flex;gap:5px;align-items:center;font-variant-numeric:tabular-nums}
+.badge-date::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--movie)}
+.tbadge{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(6,12,24,.82);border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.tbadge i{width:8px;height:8px;border-radius:2px}
+.cbody{padding:12px 14px 14px;display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
+.cmeta{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card h3{margin:0;font-size:16px;line-height:1.2;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card p{margin:0;font-size:13px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cfoot{margin-top:auto;padding-top:8px;display:flex;align-items:center;gap:8px;min-width:0}
+.ycta{background:var(--cta);color:var(--cta-fg);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:800;white-space:nowrap}
+.cfoot .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.day-group{display:flex;flex-direction:column;gap:12px}
+.day-title{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.day-title b{font-family:var(--display);font-size:22px;font-weight:800;text-transform:uppercase}
+.day-title span{color:var(--muted);font-size:13px}
+.list{display:flex;flex-direction:column;gap:30px}
+.more{align-self:center}
+.empty{border:1px dashed var(--line);border-radius:var(--r);padding:36px 20px;text-align:center;color:var(--muted)}
+.empty h3{margin:0 0 6px;color:var(--fg);font-family:var(--display);font-size:24px;text-transform:uppercase}
+.skel{background:linear-gradient(90deg,var(--panel) 0%,var(--panel-2) 50%,var(--panel) 100%);background-size:200% 100%;animation:sk 1.2s infinite linear;border-radius:var(--r);height:290px;border:1px solid var(--line)}
+@keyframes sk{to{background-position:-200% 0}}
+
+/* ---------- calendar ---------- */
+.cal-wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}
+.cal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.cal-head,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.cal-head div{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:4px 8px 8px}
+.cell{min-height:104px;background:var(--panel-2);border:1px solid transparent;border-radius:10px;padding:7px;display:flex;flex-direction:column;gap:6px;text-align:left;min-width:0;position:relative;transition:border-color .12s,background .12s}
+.cell:hover{border-color:#2b4a78}
+.cell.out{background:transparent;cursor:default;opacity:.3}
+.cell.sel{border-color:var(--accent);background:#14294a;box-shadow:0 0 0 1px var(--accent) inset}
+.cell .dn{font-family:var(--display);font-weight:800;font-size:20px;line-height:1;font-variant-numeric:tabular-nums}
+.cell.today .dn{color:var(--cta)}
+.cell .tot{position:absolute;top:8px;right:8px;font-size:11px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.stack{display:flex;margin-top:auto;overflow:hidden;max-width:100%;padding-right:8px}
+.stack span{width:24px;height:24px;border-radius:50%;border:2px solid var(--panel-2);margin-right:-8px;background:var(--panel-3) center/cover;flex:none}
+.cell.sel .stack span{border-color:#14294a}
+.dots{display:flex;gap:4px;flex-wrap:wrap}
+.dots i{height:5px;border-radius:3px;display:block;min-width:5px}
+.daypanel{position:sticky;top:84px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 104px)}
+.dp-head{padding:18px 18px 14px;background:linear-gradient(140deg,#16305a,#0f1d36);border-bottom:1px solid var(--line)}
+.dp-head h2{margin:0;font-size:40px}
+.dp-head p{margin:4px 0 10px;color:#c3cfe6}
+.dp-list{overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.dp-type{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:8px 6px 2px;display:flex;align-items:center;gap:7px}
+.dp-type i{width:8px;height:8px;border-radius:2px}
+.row{display:flex;gap:12px;padding:8px;border-radius:10px;text-align:left;width:100%;align-items:flex-start;min-width:0}
+.row:hover{background:var(--panel-2)}
+.row .rimg{width:58px;aspect-ratio:2/3;border-radius:7px;overflow:hidden;flex:none;background:var(--panel-3);position:relative}
+.row .rimg img{width:100%;height:100%;object-fit:cover}
+.row .rimg .ph{font-size:18px}
+.row .rt{min-width:0;display:flex;flex-direction:column;gap:3px}
+.row b{font-size:14.5px;line-height:1.2}
+.row .rm{font-size:12px;color:var(--muted)}
+.row p{margin:0;font-size:12.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* ---------- dialog ---------- */
+dialog{border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:16px;padding:0;width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto}
+dialog::backdrop{background:rgba(2,6,14,.75);backdrop-filter:blur(4px)}
+.d-hero{position:relative;height:240px;background:var(--panel-2) center/cover}
+.d-hero::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,var(--panel),rgba(13,24,41,.2) 70%)}
+.d-close{position:absolute;top:12px;right:12px;z-index:3;background:rgba(6,12,24,.7)}
+.d-body{display:flex;gap:20px;padding:0 24px 24px;margin-top:-90px;position:relative;z-index:2}
+.d-poster{width:150px;aspect-ratio:2/3;border-radius:12px;overflow:hidden;flex:none;background:var(--panel-3);box-shadow:0 14px 40px rgba(0,0,0,.5);position:relative;border:1px solid rgba(255,255,255,.1)}
+.d-poster img{width:100%;height:100%;object-fit:cover}
+.d-info{display:flex;flex-direction:column;gap:10px;padding-top:70px;min-width:0}
+.d-info h2{margin:0;font-size:40px;text-wrap:balance}
+.d-info .desc{color:#c3cfe6;margin:0;max-width:62ch;white-space:pre-line}
+.kv{display:flex;flex-wrap:wrap;gap:6px}
+.kv .chip{cursor:default}
+.d-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.set-body{padding:24px;display:flex;flex-direction:column;gap:16px}
+.set-body h2{margin:0;font-size:32px}
+.set-body p{margin:0;color:var(--muted);font-size:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-weight:700;font-size:14px}
+.field label a{font-weight:600;font-size:13px;margin-left:6px}
+.field input[type=text],.field input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 12px;outline:0;width:100%}
+.field input:focus{border-color:var(--accent)}
+.field small{color:var(--dim);font-size:12.5px}
+.check{display:flex;gap:10px;align-items:center;font-weight:600}
+/* favorites */
+.fav{position:absolute;top:7px;right:7px;z-index:2;width:32px;height:32px;border-radius:50%;background:rgba(6,12,24,.72);display:grid;place-items:center;color:#cfd8ea;transition:transform .12s,color .12s}
+.fav:hover{transform:scale(1.1);color:#fff}
+.fav svg{width:17px;height:17px}
+.fav[aria-pressed="true"]{color:var(--movie);background:rgba(6,12,24,.85)}
+.fav[aria-pressed="true"] svg path{fill:currentColor}
+.row-wrap{position:relative}
+.row-wrap .row{padding-right:44px}
+.row-wrap .fav{top:50%;transform:translateY(-50%);right:6px;background:var(--panel-2)}
+.row-wrap .fav:hover{transform:translateY(-50%) scale(1.1)}
+.cell.hasfav::after{content:"";position:absolute;bottom:7px;right:7px;width:9px;height:9px;background:var(--movie);clip-path:path("M4.5 8.6L.9 5A2.2 2.2 0 0 1 4.5 1.9 2.2 2.2 0 0 1 8.1 5z")}
+.nav-btn .heart{color:var(--movie)}
+.fav-tools{display:flex;gap:8px;flex-wrap:wrap}
+.code-box{width:100%;min-height:120px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:12px/1.4 ui-monospace,Consolas,monospace;color:var(--fg);resize:vertical;word-break:break-all}
+.code-box:focus{outline:0;border-color:var(--accent)}
+.top.dim .month{opacity:.35;pointer-events:none}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel-3);border:1px solid #2b4a78;padding:10px 16px;border-radius:10px;font-size:14px;z-index:90;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:calc(100vw - 32px)}
+.scrim{position:fixed;inset:0;background:rgba(2,6,14,.6);z-index:35}
+
+/* ---------- responsive ---------- */
+@media (max-width:1280px){.hero-feat{display:none}}
+@media (max-width:1180px){.cal-wrap{grid-template-columns:minmax(0,1fr) 320px}.cell .tot{display:none}}
+@media (max-width:980px){
+  .side{transform:translateX(-100%);transition:transform .22s;box-shadow:20px 0 60px rgba(0,0,0,.5)}
+  body.drawer .side{transform:none}
+  .main{margin-left:0}
+  .burger{display:grid}
+  .cal-wrap{grid-template-columns:minmax(0,1fr)}
+  .daypanel{position:static;max-height:none}
+  .typerow{display:flex;gap:6px;overflow-x:auto;padding:0 16px 2px;margin:0 -16px;scrollbar-width:none;width:calc(100% + 32px);order:5}
+  .typerow::-webkit-scrollbar{display:none}
+  .typerow .chip{flex:none}
+}
+@media (max-width:680px){
+  .top{padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top,0px));gap:10px}
+  .content{padding:16px 16px 40px;gap:22px}
+  .month-label{font-size:20px;min-width:0;flex:1}
+  .month{flex:1}
+  .tab span{display:none}
+  .search{order:4;flex:1 1 100%;margin-left:0}
+  .hero-in{padding:18px;flex-direction:column;gap:14px}
+  .hero-poster{width:84px}
+  .hero-art{inset:0;opacity:.45;mask-image:none;-webkit-mask-image:none}
+  .hero-feat{display:none}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .card p{display:none}
+  .cbody{padding:10px}
+  .card h3{font-size:14.5px}
+  .tbadge{font-size:11px}
+  .cal{padding:8px}
+  .cal-head,.cal-grid{gap:3px}
+  .cal-head div{padding:2px 0 6px;text-align:center;font-size:10px;letter-spacing:.04em}
+  .cell{min-height:58px;padding:5px;border-radius:8px;align-items:center}
+  .cell .dn{font-size:16px}
+  .cell .tot,.stack{display:none}
+  .dots{justify-content:center}
+  .d-body{flex-direction:column;margin-top:-70px;padding:0 16px 18px;gap:12px}
+  .d-poster{width:110px}
+  .d-info{padding-top:0}
+  .d-info h2{font-size:32px}
+  .d-hero{height:170px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<aside class="side" id="side" aria-label="Filters">
+  <div class="brand">
+    <div class="brand-mark"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-6"/></svg></div>
+    <div><div class="disp brand-name">Release Radar</div><small id="brandSub">What's coming out</small></div>
+  </div>
+  <nav class="nav" aria-label="Media type"><div class="eyebrow">Media</div><div id="typeNav"></div></nav>
+  <nav class="nav" aria-label="Your list"><div class="eyebrow">Your list</div><div id="favNav"></div></nav>
+  <section class="nav" id="platBox" aria-label="Platforms"><div class="eyebrow">Game platforms</div><div class="chips" id="platChips"></div></section>
+  <section class="nav" aria-label="Genres"><div class="eyebrow">Genres</div><div class="chips" id="genreChips"></div><button class="link-btn" id="genreMore" hidden></button></section>
+  <div class="promo">
+    <h4>Data sources</h4>
+    <ul class="src-list" id="srcList"></ul>
+    <button class="btn" id="openSettings"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>API keys &amp; settings</button>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="top">
+    <button class="burger" id="burger" aria-label="Open filters"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
+    <div class="month">
+      <button id="prevM" aria-label="Previous month"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <div class="disp month-label" id="monthLabel"></div>
+      <button id="nextM" aria-label="Next month"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="grid"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg><span>Overview</span></button>
+      <button class="tab" role="tab" data-view="cal"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Calendar</span></button>
+    </div>
+    <label class="search"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search this month's releases" autocomplete="off"></label>
+    <div class="typerow" id="typeRow"></div>
+  </header>
+  <main class="content" id="content"></main>
+</div>
+
+<dialog id="detail"></dialog>
+<dialog id="settings">
+  <form class="set-body" id="setForm" method="dialog">
+    <h2 class="disp">Data sources</h2>
+    <p>Free API keys unlock the full movie, TV and game catalogs with posters. Without them the app uses TVMaze and Wikidata, which have fewer titles and fewer images. Keys are saved only in this browser.</p>
+    <div class="field"><label for="kTmdb">TMDB key (movies + TV)<a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Get a free key</a></label><input id="kTmdb" type="password" autocomplete="off" placeholder="API key (v3) or Read Access Token"><small>Sign up at themoviedb.org, then Settings → API.</small></div>
+    <div class="field"><label for="kRawg">RAWG key (games: PS5, Xbox, Switch, Steam)<a href="https://rawg.io/apidocs" target="_blank" rel="noopener">Get a free key</a></label><input id="kRawg" type="password" autocomplete="off" placeholder="RAWG API key"></div>
+    <div class="field"><label for="kBooks">Google Books key (optional)<a href="https://console.cloud.google.com/apis/library/books.googleapis.com" target="_blank" rel="noopener">Enable API</a></label><input id="kBooks" type="password" autocomplete="off" placeholder="Google Cloud API key"><small>Google often blocks key-less book requests. A key makes book data reliable.</small></div>
+    <label class="check"><input type="checkbox" id="tvAll"> Show every TV episode, not only premieres</label>
+    <div class="d-actions"><button class="btn cta" value="save" id="saveKeys">Save and reload data</button><button class="btn ghost" type="button" id="clearCache">Clear cached data</button><button class="btn ghost" value="cancel" formnovalidate>Close</button></div>
+  </form>
+</dialog>
+<dialog id="favCode">
+  <form class="set-body" id="favForm" method="dialog">
+    <h2 class="disp" id="favCodeTitle">Move favorites</h2>
+    <p id="favCodeHelp"></p>
+    <label class="field" for="favCodeBox"><span class="eyebrow">Favorites code</span></label>
+    <textarea class="code-box" id="favCodeBox" spellcheck="false"></textarea>
+    <div class="d-actions"><button class="btn cta" type="button" id="favCodeAct"></button><button class="btn ghost" value="cancel">Close</button></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},clear(prefix){try{Object.keys(localStorage).filter(k=>k.startsWith(prefix)).forEach(k=>localStorage.removeItem(k))}catch(e){}}};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const stripHtml=h=>{if(!h)return'';const d=document.createElement('div');d.innerHTML=h;return d.textContent.trim()};
+const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+
+const ICON={
+  all:'<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+  movie:'<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 4v16M17 4v16M3 9h4M17 9h4M3 15h4M17 15h4"/>',
+  game:'<path d="M7 9h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 14h-5l-1.1 1.8A3 3 0 0 1 3 14v-1a4 4 0 0 1 4-4z"/><path d="M8 11.5v2M7 12.5h2M15.5 12h.01M17.5 13h.01"/>',
+  tv:'<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M8 3l4 3 4-3"/>',
+  book:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7"/>'
+};
+const svg=k=>`<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
+const TYPES={movie:{label:'Movies',one:'Movie',c:'var(--movie)'},game:{label:'Games',one:'Game',c:'var(--game)'},tv:{label:'TV shows',one:'TV',c:'var(--tv)'},book:{label:'Books',one:'Book',c:'var(--book)'}};
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const pad=n=>String(n).padStart(2,'0');
+const todayISO=(()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`})();
+const ymParts=ym=>ym.split('-').map(Number);
+const dim=ym=>{const[y,m]=ymParts(ym);return new Date(y,m,0).getDate()};
+const monthRange=ym=>[`${ym}-01`,`${ym}-${pad(dim(ym))}`];
+const shiftYM=(ym,d)=>{const[y,m]=ymParts(ym);const t=new Date(y,m-1+d,1);return `${t.getFullYear()}-${pad(t.getMonth()+1)}`};
+const dateObj=iso=>{const[y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d)};
+const fmtShort=iso=>{const d=dateObj(iso);return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}`};
+const fmtBadge=iso=>{const d=dateObj(iso);return `${WD[d.getDay()].toUpperCase()} ${pad(d.getDate())}`};
+
+/* ---------- genre & platform normalisation ---------- */
+const GALIAS={'sci fi':'Science Fiction','science fiction':'Science Fiction','sf':'Science Fiction','sci fi fantasy':['Science Fiction','Fantasy'],'action adventure':'Action-Adventure','action adventure game':'Action-Adventure','role playing':'RPG','role playing video':'RPG','role playing games':'RPG','rpg':'RPG','action role playing':'RPG','first person shooter':'Shooter','third person shooter':'Shooter','shooter':'Shooter','massively multiplayer':'MMO','massively multiplayer online role playing':'MMO','animated':'Animation','animation':'Animation','biographical':'Biography','biography autobiography':'Biography','biography':'Biography','juvenile fiction':'Kids','children s':'Kids','kids':'Kids','young adult fiction':'Young Adult','young adult':'Young Adult','war politics':['War','Politics'],'comedy drama':'Comedy','romantic comedy':['Romance','Comedy'],'crime thriller':['Crime','Thriller'],'psychological thriller':'Thriller','thrillers':'Thriller','fiction':'Fiction','reality':'Reality','talk':'Talk Show','soap':'Soap','music':'Music','musical':'Music','concert':'Music','documentary':'Documentary','tv movie':'TV Movie','platformer':'Platformer','platform':'Platformer','indie':'Indie','casual':'Casual','sports':'Sports','racing':'Racing','strategy':'Strategy','real time strategy':'Strategy','simulation':'Simulation','puzzle':'Puzzle','fighting':'Fighting','arcade':'Arcade','board games':'Board Games','card':'Card','educational':'Educational','family':'Family','survival horror':'Horror'};
+function normGenre(g){
+  let k=norm(g).replace(/\b(film|films|movie|video game|television series|tv series|novel|literature|book|genre)\b/g,'').replace(/\s+/g,' ').trim();
+  if(!k)return[];
+  const a=GALIAS[k]; if(a)return Array.isArray(a)?a:[a];
+  if(k.length>28)return[];
+  return[k.replace(/\b\w/g,c=>c.toUpperCase())];
+}
+const normGenres=arr=>[...new Set((arr||[]).flatMap(g=>String(g).split(/\s*&\s*|\s*\/\s*/).length>1&&!GALIAS[norm(g)]?String(g).split(/\s*&\s*|\s*\/\s*/):[g]).flatMap(normGenre))];
+function normPlat(name){
+  const n=String(name).toLowerCase();
+  if(/playstation 5|ps5/.test(n))return'PS5'; if(/playstation 4|ps4/.test(n))return'PS4';
+  if(/xbox series/.test(n))return'Xbox Series X|S'; if(/xbox one/.test(n))return'Xbox One';
+  if(/switch 2/.test(n))return'Switch 2'; if(/switch/.test(n))return'Switch';
+  if(/^pc$|windows|steam/.test(n))return'PC / Steam'; if(/mac/.test(n))return'Mac'; if(/linux/.test(n))return'Linux';
+  if(/\bios\b|iphone|ipad/.test(n))return'iOS'; if(/android/.test(n))return'Android';
+  if(/xbox/.test(n))return'Xbox'; if(/playstation/.test(n))return'PlayStation';
+  return null;
+}
+const PLAT_ORDER=['PS5','Xbox Series X|S','Switch 2','Switch','PC / Steam','PS4','Xbox One','Mac','Linux','iOS','Android','Xbox','PlayStation'];
+
+/* ---------- state ---------- */
+const S={
+  ym:todayISO.slice(0,7), type:store.get('rr:type','all'), genres:new Set(), plats:new Set(),
+  view:store.get('rr:view','grid'), q:'', day:null, items:[], src:{}, shown:96, tok:0, genreAll:false,
+  keys:store.get('rr:keys',{tmdb:'',rawg:'',gbooks:''}), tvAll:store.get('rr:tvAll',false), detailId:null
+};
+
+/* ---------- favorites (saved per browser, keyed by item.key so they survive source changes) ---------- */
+let FAV=store.get('rr:favs',{});
+const isFav=i=>!!FAV[i.key];
+const HEART='<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20.5l-7.6-7.4a4.8 4.8 0 0 1 6.8-6.8l.8.8.8-.8a4.8 4.8 0 0 1 6.8 6.8z"/></svg>';
+const favLabel=i=>isFav(i)?`Remove ${i.title} from favorites`:`Save ${i.title} to favorites`;
+const favBtn=i=>`<button class="fav" data-fav="${esc(i.key)}" aria-pressed="${isFav(i)}" aria-label="${esc(favLabel(i))}">${HEART}</button>`;
+function snap(i){const{_wk,_rd,...s}=i;if(s.desc&&s.desc.length>600)s.desc=s.desc.slice(0,600)+'…';return s}
+function toggleFav(key){
+  const i=S.items.find(x=>x.key===key)||FAV[key];if(!i)return;
+  if(FAV[key]){delete FAV[key];toast(`Removed “${i.title}” from favorites`)}else{FAV[key]=snap(i);toast(`Saved “${i.title}” to favorites`)}
+  store.set('rr:favs',FAV);
+  if(S.view==='grid'){$$(`.fav[data-fav="${CSS.escape(key)}"]`).forEach(b=>{b.setAttribute('aria-pressed',isFav(i));b.setAttribute('aria-label',favLabel(i))});renderSide()}
+  else renderAll();
+  if($('#detail').open&&S.detailId)openDetail(S.detailId);
+}
+const safeUrl=u=>typeof u==='string'&&/^https:\/\//.test(u)?u:null;
+const encCode=o=>btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+const decCode=s=>JSON.parse(decodeURIComponent(escape(atob(s.replace(/\s+/g,'')))));
+function favCode(mode){
+  const box=$('#favCodeBox'),act=$('#favCodeAct');
+  if(mode==='export'){
+    $('#favCodeTitle').textContent='Copy favorites';
+    $('#favCodeHelp').textContent='Copy this code, open Release Radar on your other device, go to Favorites and choose Paste favorites code.';
+    box.value=encCode(Object.values(FAV));box.readOnly=true;act.textContent='Copy code';
+    act.onclick=async()=>{try{await navigator.clipboard.writeText(box.value);toast('Code copied')}catch(e){box.focus();box.select();toast('Select the code and copy it manually')}};
+  }else{
+    $('#favCodeTitle').textContent='Paste favorites';
+    $('#favCodeHelp').textContent='Paste a favorites code from another device. Favorites you already have here are kept.';
+    box.value='';box.readOnly=false;act.textContent='Add favorites';
+    act.onclick=()=>{
+      try{
+        const arr=decCode(box.value);if(!Array.isArray(arr))throw 0;let n=0;
+        for(const i of arr){
+          if(!i||typeof i.key!=='string'||typeof i.title!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(i.date)||!TYPES[i.type]||FAV[i.key])continue;
+          FAV[i.key]={key:i.key,id:String(i.id||i.key),type:i.type,title:i.title,date:i.date,sub:String(i.sub||''),by:String(i.by||''),
+            desc:String(i.desc||'').slice(0,800),short:String(i.short||''),img:safeUrl(i.img),backdrop:safeUrl(i.backdrop),url:safeUrl(i.url)||'#',
+            genres:Array.isArray(i.genres)?i.genres.map(String):[],plats:Array.isArray(i.plats)?i.plats.map(String):[],
+            source:PRI_SAFE.includes(i.source)?i.source:'wikidata',srcName:String(i.srcName||'source'),pop:Number(i.pop)||0};
+          n++;
+        }
+        store.set('rr:favs',FAV);$('#favCode').close();toast(`Added ${n} favorite${n===1?'':'s'}`);renderAll();
+      }catch(e){toast('That code is not valid. Copy the whole code and try again.')}
+    };
+  }
+  $('#favCode').showModal();
+}
+const PRI_SAFE=['tmdb','rawg','hardcover','tvmaze','gbooks','wikidata'];
+
+/* ---------- fetching ---------- */
+async function getJSON(url,opt={}){
+  for(let a=0;a<3;a++){
+    const r=await fetch(url,{headers:opt.headers});
+    if(r.status===429){await sleep(1600*(a+1));continue}
+    if(!r.ok){let m='';try{const j=await r.json();m=j.status_message||j.error||j.detail||j.error?.message||''}catch(e){}throw new Error(`${r.status}${m?': '+m:''}`)}
+    return r.json();
+  }
+  throw new Error('429: rate limited');
+}
+const TMDB_IMG='https://image.tmdb.org/t/p/';
+function tmdb(path,params={}){
+  const k=S.keys.tmdb.trim(), bearer=k.length>40, p=new URLSearchParams({language:'en-US',...params});
+  if(!bearer)p.set('api_key',k);
+  return getJSON(`https://api.themoviedb.org/3${path}?${p}`,bearer?{headers:{Authorization:'Bearer '+k}}:{});
+}
+async function tmdbGenres(kind){const j=await tmdb(`/genre/${kind}/list`);return Object.fromEntries(j.genres.map(g=>[g.id,g.name]))}
+async function tmdbMovies(from,to){
+  const g=await tmdbGenres('movie');
+  const pages=await Promise.all([1,2,3,4,5].map(page=>tmdb('/discover/movie',{'primary_release_date.gte':from,'primary_release_date.lte':to,sort_by:'popularity.desc',include_adult:'false',page}).catch(()=>({results:[]}))));
+  return pages.flatMap(p=>p.results).filter(m=>m.release_date>=from&&m.release_date<=to&&(m.poster_path||m.overview)).map(m=>({
+    key:'movie:'+norm(m.title),id:'tm'+m.id,type:'movie',title:m.title,date:m.release_date,
+    img:m.poster_path?TMDB_IMG+'w342'+m.poster_path:null,backdrop:m.backdrop_path?TMDB_IMG+'w1280'+m.backdrop_path:null,
+    desc:m.overview,genres:normGenres((m.genre_ids||[]).map(i=>g[i]).filter(Boolean)),plats:[],lang:m.original_language,
+    url:`https://www.themoviedb.org/movie/${m.id}`,source:'tmdb',srcName:'TMDB',pop:m.popularity||0}));
+}
+async function tmdbTV(from,to){
+  const g=await tmdbGenres('tv');
+  const pages=await Promise.all([1,2,3].map(page=>tmdb('/discover/tv',{'first_air_date.gte':from,'first_air_date.lte':to,sort_by:'popularity.desc',page}).catch(()=>({results:[]}))));
+  return pages.flatMap(p=>p.results).filter(t=>t.first_air_date>=from&&t.first_air_date<=to&&(t.poster_path||t.overview)).map(t=>({
+    key:`tv:${norm(t.name)}:${t.first_air_date}`,id:'tt'+t.id,type:'tv',title:t.name,sub:'Series premiere',date:t.first_air_date,
+    img:t.poster_path?TMDB_IMG+'w342'+t.poster_path:null,backdrop:t.backdrop_path?TMDB_IMG+'w1280'+t.backdrop_path:null,
+    desc:t.overview,genres:normGenres((t.genre_ids||[]).map(i=>g[i]).filter(Boolean)),plats:[],lang:t.original_language,
+    url:`https://www.themoviedb.org/tv/${t.id}`,source:'tmdb',srcName:'TMDB',pop:t.popularity||0}));
+}
+async function rawg(from,to,alive){
+  const out=[];
+  for(let page=1;page<=4&&alive();page++){
+    const j=await getJSON(`https://api.rawg.io/api/games?key=${encodeURIComponent(S.keys.rawg.trim())}&dates=${from},${to}&ordering=-added&page_size=40&page=${page}`);
+    out.push(...j.results);
+    if(!j.next)break;
+  }
+  return out.filter(g=>g.released&&g.released>=from&&g.released<=to).map(g=>({
+    key:'game:'+norm(g.name),id:'rw'+g.id,rid:g.id,type:'game',title:g.name,date:g.released,
+    img:g.background_image,backdrop:g.background_image,desc:'',
+    genres:normGenres((g.genres||[]).map(x=>x.name)),plats:[...new Set((g.platforms||[]).map(p=>normPlat(p.platform.name)).filter(Boolean))],
+    url:`https://rawg.io/games/${g.slug}`,source:'rawg',srcName:'RAWG',pop:(g.added||0)/50}));
+}
+async function tvmaze(from,to,alive,onPart){
+  const days=[];for(let d=dateObj(from);d<=dateObj(to);d.setDate(d.getDate()+1))days.push(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`);
+  const urls=days.flatMap(d=>[`https://api.tvmaze.com/schedule?country=US&date=${d}`,`https://api.tvmaze.com/schedule/web?date=${d}`]);
+  const out=[];let i=0,fails=0;
+  const worker=async()=>{while(i<urls.length&&alive()){const u=urls[i++];try{const data=await getJSON(u);const items=data.map(tvmItem).filter(Boolean);out.push(...items);onPart(items)}catch(e){fails++}await sleep(550)}};
+  await Promise.all([worker(),worker()]);
+  if(fails>urls.length/2)throw new Error('TVMaze unavailable');
+  return out;
+}
+function tvmItem(ep){
+  const sh=ep.show||ep._embedded?.show; if(!sh||!ep.airdate)return null;
+  if(!S.tvAll&&ep.number!==1)return null;
+  const prem=ep.number===1?(ep.season===1?'Series premiere':`Season ${ep.season} premiere`):`S${ep.season}E${ep.number}${ep.name?' · '+ep.name:''}`;
+  return{key:`tv:${norm(sh.name)}:${ep.airdate}`,id:'tvm'+ep.id,type:'tv',title:sh.name,sub:prem,date:ep.airdate,
+    img:sh.image?.medium||null,backdrop:sh.image?.original||null,desc:stripHtml(sh.summary),genres:normGenres(sh.genres),plats:[],
+    by:(sh.network||sh.webChannel)?.name,lang:sh.language,url:sh.url,source:'tvmaze',srcName:'TVMaze',pop:(sh.weight||0)/4};
+}
+const WD_TYPES={movie:'wd:Q11424 wd:Q24869 wd:Q506240',game:'wd:Q7889',book:'wd:Q7725634 wd:Q47461344 wd:Q571 wd:Q8261'};
+async function wikidata(kind,from,to){
+  const next=shiftYM(from.slice(0,7),1)+'-01';
+  const q=`SELECT ?item ?itemLabel ?itemDescription (MIN(?d) AS ?date) (SAMPLE(?img) AS ?image) (SAMPLE(?art) AS ?article) (GROUP_CONCAT(DISTINCT ?gL;separator="|") AS ?genres) (GROUP_CONCAT(DISTINCT ?pL;separator="|") AS ?plats) (SAMPLE(?auL) AS ?author) WHERE {
+  VALUES ?t { ${WD_TYPES[kind]} } ?item wdt:P31 ?t; wdt:P577 ?d.
+  FILTER(?d >= "${from}T00:00:00Z"^^xsd:dateTime && ?d < "${next}T00:00:00Z"^^xsd:dateTime)
+  OPTIONAL{?item wdt:P18 ?img}
+  OPTIONAL{?art schema:about ?item; schema:isPartOf <https://en.wikipedia.org/>}
+  OPTIONAL{?item wdt:P136 ?g. ?g rdfs:label ?gL. FILTER(lang(?gL)="en")}
+  ${kind==='game'?'OPTIONAL{?item wdt:P400 ?p. ?p rdfs:label ?pL. FILTER(lang(?pL)="en")}':''}
+  ${kind==='book'?'OPTIONAL{?item wdt:P50 ?au. ?au rdfs:label ?auL. FILTER(lang(?auL)="en")}':''}
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
+} GROUP BY ?item ?itemLabel ?itemDescription LIMIT 800`;
+  const j=await getJSON('https://query.wikidata.org/sparql?format=json&query='+encodeURIComponent(q));
+  return j.results.bindings.filter(b=>b.itemLabel&&!/^Q\d+$/.test(b.itemLabel.value)).map(b=>{
+    const date=b.date.value.slice(0,10), title=b.itemLabel.value;
+    const art=b.article?.value;
+    return{key:kind==='tv'?`tv:${norm(title)}:${date}`:`${kind}:${norm(title)}`,id:'wd'+b.item.value.split('/').pop()+kind,type:kind,title,date,
+      img:b.image?b.image.value.replace(/^http:/,'https:')+'?width=500':null,backdrop:null,
+      desc:'',short:b.itemDescription?.value||'',genres:normGenres(b.genres?.value?b.genres.value.split('|'):[]),
+      plats:[...new Set((b.plats?.value?b.plats.value.split('|'):[]).map(normPlat).filter(Boolean))],
+      by:b.author?.value,wiki:art?decodeURIComponent(art.split('/wiki/')[1]):null,
+      url:art||b.item.value,source:'wikidata',srcName:'Wikidata',pop:b.image||art?1:.2};
+  });
+}
+const BOOK_SUBJECTS=[['fiction','Fiction'],['fantasy','Fantasy'],['science fiction','Science Fiction'],['thrillers','Thriller'],['mystery','Mystery'],['romance','Romance'],['horror','Horror'],['young adult fiction','Young Adult'],['biography','Biography'],['history','History'],['comics','Comics']];
+async function gbooks(from,to,alive){
+  const out=[];let ok=0,err;
+  for(const[s,label]of BOOK_SUBJECTS){
+    if(!alive())break;
+    try{
+      const k=S.keys.gbooks.trim();
+      const j=await getJSON(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(`subject:"${s}"`)}&orderBy=newest&maxResults=40&printType=books&langRestrict=en${k?'&key='+encodeURIComponent(k):''}`);
+      ok++;
+      for(const v of j.items||[]){
+        const i=v.volumeInfo||{}; const d=i.publishedDate||'';
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d<from||d>to)continue;
+        out.push({key:'book:'+norm(i.title),id:'gb'+v.id,type:'book',title:i.title+(i.subtitle?': '+i.subtitle:''),date:d,
+          img:i.imageLinks?.thumbnail?.replace(/^http:/,'https:')||null,backdrop:null,desc:stripHtml(i.description),
+          genres:normGenres([label,...(i.categories||[])]),plats:[],by:(i.authors||[]).join(', '),
+          url:i.infoLink||i.canonicalVolumeLink,source:'gbooks',srcName:'Google Books',pop:(i.ratingsCount||0)+(i.imageLinks?1:0)});
+      }
+    }catch(e){err=e;if(String(e.message).startsWith('429'))break}
+    await sleep(250);
+  }
+  if(!ok&&err)throw err;
+  return out;
+}
+// Hardcover runs through the Netlify Function (token stays server-side). Anywhere else the endpoint is missing and the source switches off quietly.
+async function hardcover(from){
+  const ym=from.slice(0,7);let r;
+  try{r=await fetch(`/.netlify/functions/hardcover-books?month=${ym}`)}catch(e){throw new Error('off')}
+  if(r.status===404||!(r.headers.get('content-type')||'').includes('json'))throw new Error('off');
+  const j=await r.json();
+  if(!r.ok)throw new Error(j.error||`Hardcover ${r.status}`);
+  const names=c=>(Array.isArray(c)?c:[]).map(x=>x?.author?.name||x?.name).filter(Boolean);
+  const tags=t=>{const g=t&&(t.Genre||t.genre);return(Array.isArray(g)?g:[]).map(x=>typeof x==='string'?x:x?.tag).filter(Boolean).slice(0,6)};
+  return(j.books||[]).filter(b=>b.title&&b.release_date).map(b=>({
+    key:'book:'+norm(b.title),id:'hc'+b.id,type:'book',title:b.title+(b.subtitle?': '+b.subtitle:''),date:b.release_date,
+    img:b.cached_image?.url||null,backdrop:null,desc:b.description||'',genres:normGenres(tags(b.cached_tags)),plats:[],
+    by:names(b.cached_contributors).slice(0,3).join(', '),url:`https://hardcover.app/books/${b.slug||b.id}`,
+    source:'hardcover',srcName:'Hardcover',pop:(b.users_count||0)/5}));
+}
+async function wikiSummary(item){
+  if(!item.wiki||item._wk)return;item._wk=1;
+  try{
+    const j=await getJSON('https://en.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(item.wiki.replace(/ /g,'_')));
+    if(!item.img&&j.thumbnail?.source)item.img=j.thumbnail.source;
+    if(!item.backdrop&&j.originalimage?.source)item.backdrop=j.originalimage.source;
+    if(!item.desc&&j.extract)item.desc=j.extract;
+  }catch(e){}
+}
+async function rawgDetail(item){
+  if(!item.rid||item._rd||!S.keys.rawg)return;item._rd=1;
+  try{const j=await getJSON(`https://api.rawg.io/api/games/${item.rid}?key=${encodeURIComponent(S.keys.rawg.trim())}`);
+    item.desc=j.description_raw||item.desc;item.by=[...(j.developers||[]).map(d=>d.name)].slice(0,2).join(', ')||item.by;}catch(e){}
+}
+
+/* ---------- loading orchestration ---------- */
+const PRI={tmdb:5,rawg:5,hardcover:5,tvmaze:4,gbooks:3,wikidata:1};
+function mergeItems(items){
+  const m=new Map(S.items.map(i=>[i.key,i]));
+  for(const i of items){
+    const o=m.get(i.key);
+    if(!o){m.set(i.key,i);continue}
+    const[hi,lo]=PRI[i.source]>PRI[o.source]?[i,o]:[o,i];
+    m.set(i.key,{...hi,img:hi.img||lo.img,backdrop:hi.backdrop||lo.backdrop,desc:hi.desc||lo.desc,short:hi.short||lo.short,by:hi.by||lo.by,wiki:hi.wiki||lo.wiki,
+      genres:[...new Set([...hi.genres,...lo.genres])],plats:[...new Set([...hi.plats,...lo.plats])]});
+  }
+  S.items=[...m.values()];
+}
+const SOURCES=[
+  {id:'movie',type:'movie',label:()=>S.keys.tmdb?'TMDB':'Wikidata',fn:(f,t)=>S.keys.tmdb?tmdbMovies(f,t):wikidata('movie',f,t),mode:()=>S.keys.tmdb?'ok':'fallback'},
+  {id:'game',type:'game',label:()=>S.keys.rawg?'RAWG':'Wikidata',fn:(f,t,a)=>S.keys.rawg?rawg(f,t,a):wikidata('game',f,t),mode:()=>S.keys.rawg?'ok':'fallback'},
+  {id:'tvtmdb',type:'tv',label:()=>'TMDB',fn:(f,t)=>tmdbTV(f,t),mode:()=>'ok',when:()=>!!S.keys.tmdb},
+  {id:'tvmaze',type:'tv',label:()=>'TVMaze',fn:(f,t,a,p)=>tvmaze(f,t,a,p),mode:()=>'ok',variant:()=>S.tvAll?'all':'prem'},
+  {id:'hardcover',type:'book',label:()=>'Hardcover',fn:(f)=>hardcover(f),mode:()=>'ok'},
+  {id:'gbooks',type:'book',label:()=>'Google Books',fn:(f,t,a)=>gbooks(f,t,a),mode:()=>'ok'},
+  {id:'wdbook',type:'book',label:()=>'Wikidata',fn:(f,t)=>wikidata('book',f,t),mode:()=>'fallback'}
+];
+const TTL=12*3600e3;
+function loadMonth(){
+  const tok=++S.tok, alive=()=>tok===S.tok, ym=S.ym, [from,to]=monthRange(ym);
+  S.items=[];S.src={};S.shown=96;
+  if(!S.day||!S.day.startsWith(ym))S.day=todayISO.startsWith(ym)?todayISO:null;
+  renderAll();
+  for(const src of SOURCES){
+    if(src.when&&!src.when()){continue}
+    const ck=`rr:c:${src.id}:${src.label()}:${src.variant?src.variant():''}:${ym}`;
+    const cached=store.get(ck,null);
+    if(cached&&Date.now()-cached.t<TTL){mergeItems(cached.items);S.src[src.id]={state:src.mode(),n:cached.items.length,label:src.label(),type:src.type};continue}
+    S.src[src.id]={state:'loading',n:0,label:src.label(),type:src.type};
+    const onPart=items=>{if(!alive())return;mergeItems(items);S.src[src.id].n+=items.length;queueRender()};
+    src.fn(from,to,alive,onPart).then(items=>{
+      if(!alive())return;
+      if(src.id!=='tvmaze')mergeItems(items);
+      S.src[src.id]={state:src.mode(),n:items.length,label:src.label(),type:src.type};
+      store.set(ck,{t:Date.now(),items:items.map(({_wk,_rd,...i})=>i)});
+      queueRender();
+    }).catch(e=>{
+      if(!alive())return;
+      if(e.message==='off'){delete S.src[src.id];queueRender();return}
+      S.src[src.id]={state:'error',n:0,label:src.label(),type:src.type,msg:e.message};
+      if(/^401/.test(e.message))toast(`${src.label()} rejected the API key. Check it in Settings.`);
+      queueRender();
+    });
+  }
+  queueRender();
+}
+let rq=null;function queueRender(){if(rq)return;rq=setTimeout(()=>{rq=null;renderAll()},180)}
+
+/* ---------- filtering ---------- */
+const matchQ=i=>!S.q||(i.title+' '+(i.desc||'')+' '+(i.short||'')+' '+(i.by||'')+' '+i.genres.join(' ')).toLowerCase().includes(S.q);
+const matchPlat=i=>!S.plats.size||(i.type==='game'&&i.plats.some(p=>S.plats.has(p)));
+const matchGenre=i=>!S.genres.size||i.genres.some(g=>S.genres.has(g));
+const matchType=i=>S.type==='all'||i.type===S.type;
+const sortItems=a=>a.sort((x,y)=>x.date.localeCompare(y.date)||(y.pop+(y.img?3:0))-(x.pop+(x.img?3:0)));
+function filtered(){return sortItems(S.items.filter(i=>matchType(i)&&matchGenre(i)&&matchPlat(i)&&matchQ(i)))}
+
+/* ---------- rendering: sidebar ---------- */
+function renderSide(){
+  const base=S.items.filter(i=>matchQ(i));
+  const counts={all:base.length};for(const t in TYPES)counts[t]=base.filter(i=>i.type===t).length;
+  const typeBtn=t=>`<button class="nav-btn" data-type="${t}" aria-pressed="${S.type===t}">${svg(t)}${t==='all'?'All releases':TYPES[t].label}<span class="cnt">${counts[t]||0}</span></button>`;
+  $('#typeNav').innerHTML=['all',...Object.keys(TYPES)].map(typeBtn).join('');
+  const nf=Object.keys(FAV).length;
+  $('#favNav').innerHTML=`<button class="nav-btn" data-view="favs" aria-pressed="${S.view==='favs'}"><span class="heart">${HEART}</span>Favorites<span class="cnt">${nf}</span></button>`;
+  $('#typeRow').innerHTML=['all',...Object.keys(TYPES)].map(t=>`<button class="chip" data-type="${t}" aria-pressed="${S.type===t}">${t==='all'?'All':TYPES[t].label}<small>${counts[t]||0}</small></button>`).join('')+`<button class="chip" data-view="favs" aria-pressed="${S.view==='favs'}">♥ Favorites<small>${nf}</small></button>`;
+  // platforms
+  const showPlat=S.type==='all'||S.type==='game';
+  $('#platBox').hidden=!showPlat;
+  if(showPlat){
+    const pc={};base.filter(i=>i.type==='game').forEach(i=>i.plats.forEach(p=>pc[p]=(pc[p]||0)+1));
+    const list=PLAT_ORDER.filter(p=>pc[p]||S.plats.has(p));
+    $('#platChips').innerHTML=list.length?list.map(p=>`<button class="chip" data-plat="${esc(p)}" aria-pressed="${S.plats.has(p)}">${esc(p)}<small>${pc[p]||0}</small></button>`).join(''):'<span class="eyebrow" style="padding:0 4px;letter-spacing:.04em;text-transform:none">No platform data yet</span>';
+  }
+  // genres
+  const gc={};base.filter(i=>matchType(i)&&matchPlat(i)).forEach(i=>i.genres.forEach(g=>gc[g]=(gc[g]||0)+1));
+  let gl=Object.entries(gc).sort((a,b)=>b[1]-a[1]);
+  S.genres.forEach(g=>{if(!gc[g])gl.push([g,0])});
+  const limit=S.genreAll?gl.length:16;
+  $('#genreChips').innerHTML=gl.length?gl.slice(0,limit).map(([g,n])=>`<button class="chip" data-genre="${esc(g)}" aria-pressed="${S.genres.has(g)}">${esc(g)}<small>${n}</small></button>`).join(''):'<span class="eyebrow" style="padding:0 4px;letter-spacing:.04em;text-transform:none">Genres appear as data loads</span>';
+  const more=$('#genreMore');more.hidden=gl.length<=16;more.textContent=S.genreAll?'Show fewer genres':`Show all ${gl.length} genres`;
+  // sources
+  const groups=Object.values(S.src);
+  $('#srcList').innerHTML=groups.length?groups.map(s=>`<li title="${esc(s.msg||'')}"><span class="dot ${s.state}"></span><span><b>${TYPES[s.type].label}</b> · ${esc(s.label)}${s.state==='error'?' (failed)':''}</span><span class="n">${s.state==='loading'&&!s.n?'…':s.n}</span></li>`).join(''):'';
+  $('#brandSub').textContent=`${MONTHS[ymParts(S.ym)[1]-1]} · ${base.length} titles`;
+}
+
+/* ---------- rendering: shared pieces ---------- */
+const typeColor=t=>TYPES[t].c;
+function initials(t){return t.replace(/[^A-Za-z0-9 ]/g,'').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('')||'?'}
+function phHTML(i){return`<div class="ph" style="background:linear-gradient(150deg,color-mix(in srgb,${typeColor(i.type)} 55%,#0d1829),#0d1829)">${esc(initials(i.title))}<small>${TYPES[i.type].one}</small></div>`}
+function thumbHTML(i){return i.img?`<img class="bgi" src="${esc(i.img)}" alt="" loading="lazy"><img class="fgi" src="${esc(i.img)}" alt="" loading="lazy" onerror="this.parentNode.dataset.err=1;this.previousElementSibling.remove();this.replaceWith(document.createRange().createContextualFragment(window.__ph(this.parentNode.dataset.id)))">`:phHTML(i)}
+window.__ph=id=>{const i=byId(id);return i?phHTML(i):''};
+const byId=id=>S.items.find(i=>i.id===id)||Object.values(FAV).find(i=>i.id===id);
+function metaLine(i){const bits=i.type==='game'&&i.plats.length?i.plats.slice(0,3):i.genres.slice(0,2);return bits.join(' · ')||i.sub||TYPES[i.type].one}
+function cardHTML(i){
+  const d=i.desc||i.short||'';
+  const sub=i.type==='tv'?(i.sub||''):i.type==='book'?(i.by||''):i.type==='game'?i.genres.slice(0,2).join(', '):(i.genres[0]||'');
+  return`<article class="card" data-id="${esc(i.id)}" tabindex="0" role="button" aria-label="${esc(i.title)}">
+    <div class="thumb" data-id="${esc(i.id)}">${thumbHTML(i)}<span class="badge-date">${fmtBadge(i.date)}</span><span class="tbadge"><i style="background:${typeColor(i.type)}"></i>${TYPES[i.type].one}</span>${favBtn(i)}</div>
+    <div class="cbody"><div class="cmeta">${esc(metaLine(i))}</div><h3>${esc(i.title)}</h3>${d?`<p>${esc(d)}</p>`:''}
+    <div class="cfoot"><span class="ycta">${fmtShort(i.date)}</span><span class="sub">${esc(sub)}</span></div></div></article>`;
+}
+function emptyHTML(){
+  const loading=Object.values(S.src).some(s=>s.state==='loading');
+  if(loading)return`<div class="grid">${'<div class="skel"></div>'.repeat(8)}</div>`;
+  const filt=S.genres.size||S.plats.size||S.q||S.type!=='all';
+  return`<div class="empty"><h3>Nothing matches</h3><p>${filt?'No releases match these filters this month. Clear a genre or platform, or try another month.':'No release data came back for this month. Check the data sources panel, or add API keys in Settings.'}</p>${filt?'<p><button class="btn ghost" data-act="clear">Clear filters</button></p>':''}</div>`;
+}
+
+/* ---------- rendering: overview ---------- */
+const HEAD={all:'Everything dropping in',movie:'Movies hitting screens in',game:'Games launching in',tv:'Shows premiering in',book:'Books landing in'};
+function heroHTML(list){
+  const mName=MONTHS[ymParts(S.ym)[1]-1];
+  const star=[...list].filter(i=>i.backdrop||i.img).sort((a,b)=>(b.pop+(b.backdrop?5:0))-(a.pop+(a.backdrop?5:0)))[0];
+  const counts=Object.keys(TYPES).map(t=>[t,list.filter(i=>i.type===t).length]).filter(([t,n])=>S.type==='all'||t===S.type);
+  return`<section class="hero">
+    ${star?`<div class="hero-art" style="background-image:url('${esc(star.backdrop||star.img)}')"></div>`:''}
+    <div class="hero-in">
+      ${star?.img?`<div class="hero-poster"><img src="${esc(star.img)}" alt=""></div>`:''}
+      <div class="hero-text">
+        <span class="pill">${list.length} releases · ${mName} ${ymParts(S.ym)[0]}</span>
+        <h1 class="disp">${HEAD[S.type]} ${mName}</h1>
+        <p>Every movie, game, TV premiere and book with a release date this month. Open the calendar to see a single day.</p>
+        <div class="stats">${counts.map(([t,n])=>`<div class="stat"><i style="background:${typeColor(t)}"></i><b>${n}</b><span>${TYPES[t].label}</span></div>`).join('')}</div>
+      </div>
+    </div>
+    ${star?`<button class="hero-feat" data-id="${esc(star.id)}"><span class="eyebrow">Most anticipated</span><b>${esc(star.title)}</b>${fmtShort(star.date)} · ${TYPES[star.type].one}</button>`:''}
+  </section>`;
+}
+function renderGrid(list){
+  let h=heroHTML(list);
+  if(!list.length)return h+emptyHTML();
+  const feat=[...list].filter(i=>i.img&&(i.date>=todayISO||!todayISO.startsWith(S.ym))).sort((a,b)=>b.pop-a.pop).slice(0,4);
+  if(feat.length>=4)h+=`<section><div class="sec-head"><div><h2 class="disp">Featured releases</h2><p>The most-followed titles coming this month</p></div></div><div class="grid">${feat.map(cardHTML).join('')}</div></section>`;
+  const shown=list.slice(0,S.shown), days={};
+  shown.forEach(i=>(days[i.date]=days[i.date]||[]).push(i));
+  h+=`<section><div class="sec-head"><div><h2 class="disp">All releases by date</h2><p>${list.length} titles${S.genres.size?' · '+[...S.genres].join(', '):''}</p></div></div><div class="list">`;
+  for(const d of Object.keys(days)){
+    const dt=dateObj(d), total=list.filter(i=>i.date===d).length;
+    h+=`<div class="day-group"><div class="day-title"><b>${WD[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()].slice(0,3)}</b><span>${total} release${total>1?'s':''}${d===todayISO?' · today':''}</span></div><div class="grid">${days[d].map(cardHTML).join('')}</div></div>`;
+  }
+  h+=`</div></section>`;
+  if(list.length>S.shown)h+=`<button class="btn ghost more" data-act="more">Show more (${list.length-S.shown} left)</button>`;
+  return h;
+}
+
+/* ---------- rendering: calendar ---------- */
+function renderCal(list){
+  const[y,m]=ymParts(S.ym), first=new Date(y,m-1,1), lead=(first.getDay()+6)%7, n=dim(S.ym);
+  const byDay={};list.forEach(i=>(byDay[i.date]=byDay[i.date]||[]).push(i));
+  if(!S.day){S.day=Object.keys(byDay).sort()[0]||`${S.ym}-01`}
+  let cells='';
+  for(let k=0;k<lead;k++)cells+='<div class="cell out" aria-hidden="true"></div>';
+  for(let d=1;d<=n;d++){
+    const iso=`${S.ym}-${pad(d)}`, its=byDay[iso]||[];
+    const tc=Object.keys(TYPES).map(t=>[t,its.filter(i=>i.type===t).length]).filter(x=>x[1]);
+    const pics=its.filter(i=>i.img).slice(0,4);
+    const hasFav=S.items.some(i=>i.date===iso&&isFav(i));
+    cells+=`<button class="cell${iso===S.day?' sel':''}${iso===todayISO?' today':''}${hasFav?' hasfav':''}" data-day="${iso}" aria-label="${fmtShort(iso)}: ${its.length} releases" aria-pressed="${iso===S.day}">
+      <span class="dn">${d}</span>${its.length?`<span class="tot">${its.length}</span>`:''}
+      <span class="dots">${tc.map(([t,c])=>`<i style="background:${typeColor(t)};width:${Math.min(5+c*2,30)}px" title="${c} ${TYPES[t].label}"></i>`).join('')}</span>
+      ${pics.length?`<span class="stack">${pics.map(i=>`<span style="background-image:url('${esc(i.img)}')"></span>`).join('')}</span>`:''}</button>`;
+  }
+  const tail=(7-(lead+n)%7)%7;for(let k=0;k<tail;k++)cells+='<div class="cell out" aria-hidden="true"></div>';
+  const dayItems=sortItems(byDay[S.day]||[]);
+  const dt=dateObj(S.day);
+  const groups=Object.keys(TYPES).map(t=>[t,dayItems.filter(i=>i.type===t)]).filter(g=>g[1].length);
+  const loading=Object.values(S.src).some(s=>s.state==='loading');
+  return`<div class="cal-wrap">
+    <section class="cal" aria-label="Month calendar"><div class="cal-head">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div>${d}</div>`).join('')}</div><div class="cal-grid">${cells}</div></section>
+    <aside class="daypanel" id="daypanel" aria-live="polite">
+      <div class="dp-head"><div class="eyebrow">${dayItems.length} release${dayItems.length===1?'':'s'}${S.day===todayISO?' · today':''}</div><h2 class="disp">${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()]}</h2><p>${MONTHS[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}</p>
+      <div class="kv">${groups.map(([t,a])=>`<span class="chip"><i class="dot" style="background:${typeColor(t)}"></i>${a.length} ${TYPES[t].label}</span>`).join('')}</div></div>
+      <div class="dp-list">${groups.length?groups.map(([t,a])=>`<div class="dp-type"><i style="background:${typeColor(t)}"></i>${TYPES[t].label}</div>${a.map(rowHTML).join('')}`).join(''):`<div class="empty" style="margin:6px">${loading?'Loading releases…':'Nothing releases on this day with the current filters.'}</div>`}</div>
+    </aside></div>`;
+}
+function rowHTML(i){
+  const meta=[i.type==='game'?i.plats.slice(0,3).join(' · '):'',i.sub,i.by,i.genres.slice(0,2).join(', ')].filter(Boolean).slice(0,2).join(' · ');
+  return`<div class="row-wrap"><button class="row" data-id="${esc(i.id)}"><span class="rimg thumb" data-id="${esc(i.id)}">${i.img?`<img src="${esc(i.img)}" alt="" loading="lazy">`:phHTML(i)}</span><span class="rt"><b>${esc(i.title)}</b><span class="rm">${esc(meta)}</span>${(i.desc||i.short)?`<p>${esc(i.desc||i.short)}</p>`:''}</span></button>${favBtn(i)}</div>`;
+}
+
+/* ---------- rendering: favorites ---------- */
+function renderFavs(){
+  const n=Object.keys(FAV).length;
+  const all=Object.values(FAV).map(f=>S.items.find(i=>i.key===f.key)||f).filter(i=>matchType(i)&&matchQ(i));
+  const up=all.filter(i=>i.date>=todayISO).sort((a,b)=>a.date.localeCompare(b.date));
+  const past=all.filter(i=>i.date<todayISO).sort((a,b)=>b.date.localeCompare(a.date));
+  let h=`<section class="hero" style="min-height:0"><div class="hero-in"><div class="hero-text">
+    <span class="pill">${n} saved</span><h1 class="disp">Your favorites</h1>
+    <p>Everything you've saved, across all months. Favorites are kept in this browser; use the code buttons to move them to another device.</p>
+    <div class="fav-tools"><button class="btn ghost" data-act="export"${n?'':' disabled'}>Copy favorites code</button><button class="btn ghost" data-act="import">Paste favorites code</button></div>
+  </div></div></section>`;
+  if(!n)return h+`<div class="empty"><h3>No favorites yet</h3><p>Tap the heart on any movie, game, show or book to save it here.</p><p><button class="btn ghost" data-view="grid">Browse this month</button></p></div>`;
+  const sec=(t,sub,a)=>a.length?`<section><div class="sec-head"><div><h2 class="disp">${t}</h2><p>${sub}</p></div></div><div class="grid">${a.map(cardHTML).join('')}</div></section>`:'';
+  h+=sec('Upcoming',`${up.length} on the way`,up)+sec('Already out',`${past.length} released`,past);
+  if(!up.length&&!past.length)h+=`<div class="empty"><h3>Nothing matches</h3><p>None of your favorites match the current type or search.</p><p><button class="btn ghost" data-act="clear">Clear filters</button></p></div>`;
+  return h;
+}
+
+/* ---------- render all ---------- */
+function renderAll(){
+  const[y,m]=ymParts(S.ym);
+  $('#monthLabel').textContent=`${MONTHS[m-1]} ${y}`;
+  $$('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.view===S.view));
+  $('.top').classList.toggle('dim',S.view==='favs');
+  renderSide();
+  const list=filtered();
+  const c=$('#content'), keep=S.view==='cal'?$('.dp-list')?.scrollTop:null;
+  c.innerHTML=S.view==='cal'?renderCal(list):S.view==='favs'?renderFavs():renderGrid(list);
+  if(keep&&$('.dp-list'))$('.dp-list').scrollTop=keep;
+  observeEnrich();
+}
+
+/* ---------- lazy enrichment (Wikipedia images/descriptions) ---------- */
+let io, eq=[], running=0;
+function observeEnrich(){
+  io?.disconnect();
+  io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){io.unobserve(e.target);const i=byId(e.target.dataset.id);if(i&&i.wiki&&!i._wk&&(!i.img||!i.desc)){eq.push(i);pump()}}}),{rootMargin:'200px'});
+  $$('.card,.row').forEach(el=>io.observe(el));
+}
+function pump(){
+  while(running<3&&eq.length){const i=eq.shift();running++;wikiSummary(i).then(()=>{running--;paint(i);pump()})}
+}
+function paint(i){
+  $$(`[data-id="${CSS.escape(i.id)}"]`).forEach(el=>{
+    const th=el.classList.contains('thumb')?el:el.querySelector('.thumb');
+    if(th&&i.img&&!th.querySelector('img')){th.querySelector('.ph')?.remove();th.insertAdjacentHTML('afterbegin',th.classList.contains('rimg')?`<img src="${esc(i.img)}" alt="">`:thumbHTML(i))}
+    const p=el.querySelector('.cbody p, .rt p');
+    if(i.desc){if(p)p.textContent=i.desc;else el.querySelector('.cbody h3')?.insertAdjacentHTML('afterend',`<p>${esc(i.desc)}</p>`)}
+  });
+}
+
+/* ---------- detail dialog ---------- */
+async function openDetail(id){
+  const i=byId(id);if(!i)return;
+  S.detailId=id;
+  const dlg=$('#detail');
+  const draw=()=>{
+    const facts=[TYPES[i.type].one,i.sub,i.by,i.lang&&i.lang.length<=3?i.lang.toUpperCase():i.lang].filter(Boolean);
+    dlg.innerHTML=`<div class="d-hero" style="${i.backdrop||i.img?`background-image:url('${esc(i.backdrop||i.img)}')`:`background:linear-gradient(140deg,color-mix(in srgb,${typeColor(i.type)} 45%,#0d1829),#0d1829)`}"><button class="icon-btn d-close" data-act="close" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="d-body"><div class="d-poster">${i.img?`<img src="${esc(i.img)}" alt="">`:phHTML(i)}</div>
+    <div class="d-info"><div class="kv"><span class="ycta">${fmtShort(i.date)}, ${i.date.slice(0,4)}</span>${facts.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}</div>
+    <h2 class="disp">${esc(i.title)}</h2>
+    ${i.plats.length?`<div class="kv">${i.plats.map(p=>`<span class="chip" style="color:var(--fg)">${esc(p)}</span>`).join('')}</div>`:''}
+    ${i.genres.length?`<div class="kv">${i.genres.map(g=>`<span class="chip">${esc(g)}</span>`).join('')}</div>`:''}
+    <p class="desc">${esc(i.desc||i.short||'No description available yet.')}</p>
+    <div class="d-actions"><button class="btn ${isFav(i)?'cta':'ghost'}" data-fav="${esc(i.key)}" aria-pressed="${isFav(i)}">${isFav(i)?'♥ Saved to favorites':'♡ Save to favorites'}</button><a class="btn" href="${esc(i.url)}" target="_blank" rel="noopener">Open on ${esc(i.srcName)}</a><button class="btn ghost" data-act="showday" data-day="${i.date}">See everything on ${fmtShort(i.date)}</button></div></div></div>`;
+  };
+  draw(); if(!dlg.open)dlg.showModal();
+  const before=i.desc+i.img;
+  await Promise.all([wikiSummary(i),rawgDetail(i)]);
+  if(dlg.open&&before!==i.desc+i.img){draw();paint(i)}
+}
+
+/* ---------- events ---------- */
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(t._h);t._h=setTimeout(()=>t.hidden=true,4200)}
+function setDrawer(open){document.body.classList.toggle('drawer',open);let s=$('.scrim');if(open&&!s){s=document.createElement('div');s.className='scrim';s.onclick=()=>setDrawer(false);document.body.append(s)}if(!open)s?.remove()}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-fav],[data-type],[data-genre],[data-plat],[data-day],[data-act],[data-view],.card,.row,.hero-feat');
+  if(!t)return;
+  if(t.dataset.fav!==undefined){e.stopPropagation();toggleFav(t.dataset.fav);return}
+  if(t.dataset.view){S.view=t.dataset.view;if(S.view!=='favs')store.set('rr:view',S.view);setDrawer(false);renderAll();window.scrollTo({top:0});return}
+  if(t.dataset.act==='export'||t.dataset.act==='import'){favCode(t.dataset.act);return}
+  if(t.dataset.act==='close'){$('#detail').close();return}
+  if(t.dataset.act==='showday'){$('#detail').close();S.view='cal';store.set('rr:view','cal');S.day=t.dataset.day;renderAll();window.scrollTo({top:0});return}
+  if(t.dataset.act==='more'){S.shown+=96;renderAll();return}
+  if(t.dataset.act==='clear'){S.genres.clear();S.plats.clear();S.q='';$('#q').value='';S.type='all';renderAll();return}
+  if(t.dataset.type){S.type=t.dataset.type;store.set('rr:type',S.type);S.genres.clear();if(S.type!=='game'&&S.type!=='all')S.plats.clear();S.shown=96;renderAll();return}
+  if(t.dataset.genre){const g=t.dataset.genre;S.genres.has(g)?S.genres.delete(g):S.genres.add(g);S.shown=96;renderAll();return}
+  if(t.dataset.plat){const p=t.dataset.plat;S.plats.has(p)?S.plats.delete(p):S.plats.add(p);S.shown=96;renderAll();return}
+  if(t.dataset.day&&t.classList.contains('cell')){S.day=t.dataset.day;renderAll();if(innerWidth<=980)$('#daypanel')?.scrollIntoView({behavior:'smooth',block:'start'});return}
+  if(t.dataset.id)openDetail(t.dataset.id);
+});
+document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.classList?.contains('card')){e.preventDefault();openDetail(e.target.dataset.id)}});
+$('#detail').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.close()});
+$('#genreMore').onclick=()=>{S.genreAll=!S.genreAll;renderSide()};
+$('#prevM').onclick=()=>{S.ym=shiftYM(S.ym,-1);S.day=null;loadMonth()};
+$('#nextM').onclick=()=>{S.ym=shiftYM(S.ym,1);S.day=null;loadMonth()};
+$('#burger').onclick=()=>setDrawer(!document.body.classList.contains('drawer'));
+let qt;$('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{S.q=e.target.value.trim().toLowerCase();S.shown=96;renderAll()},160)});
+$('#openSettings').onclick=()=>{setDrawer(false);$('#kTmdb').value=S.keys.tmdb;$('#kRawg').value=S.keys.rawg;$('#kBooks').value=S.keys.gbooks;$('#tvAll').checked=S.tvAll;$('#settings').showModal()};
+$('#setForm').addEventListener('submit',e=>{
+  if(e.submitter?.value!=='save')return;
+  S.keys={tmdb:$('#kTmdb').value.trim(),rawg:$('#kRawg').value.trim(),gbooks:$('#kBooks').value.trim()};S.tvAll=$('#tvAll').checked;
+  store.set('rr:keys',S.keys);store.set('rr:tvAll',S.tvAll);toast('Settings saved. Reloading release data.');loadMonth();
+});
+$('#clearCache').onclick=()=>{store.clear('rr:c:');toast('Cached release data cleared.');$('#settings').close();loadMonth()};
+
+if(!S.keys.tmdb&&!S.keys.rawg&&!store.get('rr:hinted',false)){store.set('rr:hinted',true);setTimeout(()=>toast('Running on free sources. Add TMDB and RAWG keys in Settings for full coverage.'),1200)}
+loadMonth();
+</script>
+</body>
+</html>
